@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendance App</title>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f5f7;
+  color: #111;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: white;
+  padding: 14px;
+  border-bottom: 1px solid #ddd;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+}
+
+select,
+button,
+input {
+  font: inherit;
+}
+
+select,
+button {
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  background: white;
+}
+
+button {
+  background: #111;
+  color: white;
+  border-color: #111;
+}
+
+.note {
+  background: white;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #666;
+  border-bottom: 1px solid #ddd;
+}
+
+.table-container {
+  overflow: auto;
+  height: calc(100vh - 125px);
+  -webkit-overflow-scrolling: touch;
+}
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  background: white;
+  min-width: max-content;
+}
+
+th,
+td {
+  min-width: 68px;
+  height: 46px;
+  padding: 5px;
+  text-align: center;
+  border-right: 1px solid #ddd;
+  border-bottom: 1px solid #ddd;
+  font-size: 14px;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #fafafa;
+  font-weight: 600;
+}
+
+th:first-child,
+td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  min-width: 125px;
+  text-align: left;
+  padding-left: 10px;
+  background: white;
+}
+
+th:first-child {
+  z-index: 6;
+  background: #fafafa;
+}
+
+.attendance-cell {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.attendance-cell:active {
+  background: #eee;
+}
+
+small {
+  display: block;
+  font-size: 10px;
+  color: #777;
+  font-weight: normal;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0,0,0,0.5);
+  align-items: flex-end;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.sheet {
+  width: 100%;
+  background: white;
+  border-radius: 20px 20px 0 0;
+  padding: 20px;
+}
+
+.sheet h2 {
+  margin: 0 0 6px;
+  font-size: 19px;
+}
+
+.sheet p {
+  margin: 0 0 15px;
+  color: #666;
+}
+
+.sheet input {
+  width: 100%;
+  padding: 13px;
+  font-size: 24px;
+  border: 1px solid #bbb;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  flex: 1;
+}
+
+.cancel {
+  background: #eee;
+  color: #111;
+  border-color: #eee;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>Attendance</h1>
+
+  <div class="controls">
+    <select id="month"></select>
+    <select id="year"></select>
+    <button id="reset">Reset</button>
+  </div>
+</header>
+
+<div class="note">
+  Tap a cell to enter that day's hours. The table automatically shows cumulative attendance.
+</div>
+
+<div class="table-container">
+  <table id="attendanceTable"></table>
+</div>
+
+<div class="modal" id="modal">
+
+  <div class="sheet">
+
+    <h2 id="modalTitle"></h2>
+
+    <p>
+      Enter the hours attended on this day.
+    </p>
+
+    <input
+      id="hoursInput"
+      type="number"
+      min="0"
+      step="0.5"
+      inputmode="decimal"
+      placeholder="Example: 2"
+    >
+
+    <div class="actions">
+      <button class="cancel" id="cancelButton">
+        Cancel
+      </button>
+
+      <button id="saveButton">
+        Save
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+
+const students = [];
+
+for (let i = 1; i <= 150; i++) {
+  students.push(
+    "Student " + String(i).padStart(3, "0")
+  );
+}
+
+const months = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+
+const monthSelect =
+  document.getElementById("month");
+
+const yearSelect =
+  document.getElementById("year");
+
+const table =
+  document.getElementById("attendanceTable");
+
+const modal =
+  document.getElementById("modal");
+
+const modalTitle =
+  document.getElementById("modalTitle");
+
+const hoursInput =
+  document.getElementById("hoursInput");
+
+let selectedStudent = 0;
+let selectedDay = 1;
+
+months.forEach((month, index) => {
+
+  const option =
+    document.createElement("option");
+
+  option.value = index;
+  option.textContent = month;
+
+  monthSelect.appendChild(option);
+
+});
+
+for (let year = 2026; year <= 2035; year++) {
+
+  const option =
+    document.createElement("option");
+
+  option.value = year;
+  option.textContent = year;
+
+  yearSelect.appendChild(option);
+
+}
+
+monthSelect.value = 8;
+yearSelect.value = 2026;
+
+
+function getStorageKey() {
+
+  return (
+    "attendance-" +
+    yearSelect.value +
+    "-" +
+    monthSelect.value
+  );
+
+}
+
+
+function getAttendanceData() {
+
+  try {
+
+    return JSON.parse(
+      localStorage.getItem(getStorageKey()) || "{}"
+    );
+
+  } catch {
+
+    return {};
+
+  }
+
+}
+
+
+function saveAttendanceData(data) {
+
+  localStorage.setItem(
+    getStorageKey(),
+    JSON.stringify(data)
+  );
+
+}
+
+
+function getDaysInMonth() {
+
+  return new Date(
+    Number(yearSelect.value),
+    Number(monthSelect.value) + 1,
+    0
+  ).getDate();
+
+}
+
+
+function formatNumber(number) {
+
+  if (Number.isInteger(number)) {
+    return number;
+  }
+
+  return Number(number.toFixed(1));
+
+}
+
+
+function renderTable() {
+
+  const data =
+    getAttendanceData();
+
+  const days =
+    getDaysInMonth();
+
+  let html = "<thead><tr>";
+
+  html += "<th>Student</th>";
+
+  for (let day = 1; day <= days; day++) {
+
+    html += `
+      <th>
+        ${day}
+        <small>
+          ${months[monthSelect.value].substring(0,3)}
+        </small>
+      </th>
+    `;
+
+  }
+
+  html += "</tr></thead><tbody>";
+
+
+  students.forEach((student, studentIndex) => {
+
+    html += "<tr>";
+
+    html += `
+      <td>
+        ${student}
+      </td>
+    `;
+
+    let cumulative = 0;
+
+    for (let day = 1; day <= days; day++) {
+
+      const key =
+        studentIndex + "-" + day;
+
+      const dailyHours =
+        Number(data[key] || 0);
+
+      cumulative += dailyHours;
+
+      html += `
+        <td
+          class="attendance-cell"
+          data-student="${studentIndex}"
+          data-day="${day}"
+        >
+          ${formatNumber(cumulative)}
+        </td>
+      `;
+
+    }
+
+    html += "</tr>";
+
+  });
+
+  html += "</tbody>";
+
+  table.innerHTML = html;
+
+
+  document
+    .querySelectorAll(".attendance-cell")
+    .forEach(cell => {
+
+      cell.addEventListener(
+        "click",
+        () => openEditor(cell)
+      );
+
+    });
+
+}
+
+
+function openEditor(cell) {
+
+  selectedStudent =
+    Number(cell.dataset.student);
+
+  selectedDay =
+    Number(cell.dataset.day);
+
+  const data =
+    getAttendanceData();
+
+  const key =
+    selectedStudent + "-" + selectedDay;
+
+  hoursInput.value =
+    data[key] ?? "";
+
+  modalTitle.textContent =
+    students[selectedStudent] +
+    " — " +
+    months[monthSelect.value] +
+    " " +
+    selectedDay;
+
+  modal.classList.add("show");
+
+  setTimeout(() => {
+    hoursInput.focus();
+  }, 100);
+
+}
+
+
+document
+  .getElementById("saveButton")
+  .addEventListener("click", () => {
+
+    let hours =
+      parseFloat(hoursInput.value);
+
+    if (!Number.isFinite(hours) || hours < 0) {
+      hours = 0;
+    }
+
+    const data =
+      getAttendanceData();
+
+    const key =
+      selectedStudent + "-" + selectedDay;
+
+    data[key] = hours;
+
+    saveAttendanceData(data);
+
+    modal.classList.remove("show");
+
+    renderTable();
+
+  });
+
+
+document
+  .getElementById("cancelButton")
+  .addEventListener("click", () => {
+
+    modal.classList.remove("show");
+
+  });
+
+
+modal.addEventListener("click", event => {
+
+  if (event.target === modal) {
+    modal.classList.remove("show");
+  }
+
+});
+
+
+monthSelect.addEventListener(
+  "change",
+  renderTable
+);
+
+yearSelect.addEventListener(
+  "change",
+  renderTable
+);
+
+
+document
+  .getElementById("reset")
+  .addEventListener("click", () => {
+
+    const month =
+      months[monthSelect.value];
+
+    const year =
+      yearSelect.value;
+
+    const confirmed =
+      confirm(
+        "Delete all attendance for " +
+        month +
+        " " +
+        year +
+        "?"
+      );
+
+    if (confirmed) {
+
+      localStorage.removeItem(
+        getStorageKey()
+      );
+
+      renderTable();
+
+    }
+
+  });
+
+
+renderTable();
+
+</script>
+
+</body>
+</html>
